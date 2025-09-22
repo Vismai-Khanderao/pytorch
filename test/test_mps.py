@@ -9562,6 +9562,39 @@ class TestSDPA(TestCaseMPS):
         q, k, v = self.generate_qkv(batch, NH, q_len, s_len, head_dim, contiguous, dtype)
         self.run_fast_attention_test(q, k, v, with_mask)
 
+    def test_sdpa_non_contiguous_transpose_bug(self):
+        torch.manual_seed(42)
+
+        batch_size, seq_len, num_heads, head_dim = 1, 8, 12, 64
+
+        q = torch.randn(batch_size, seq_len, num_heads, head_dim, device="mps").transpose(1, 2)
+        k = torch.randn(batch_size, seq_len, num_heads, head_dim, device="mps").transpose(1, 2)
+        v = torch.randn(batch_size, seq_len, num_heads, head_dim, device="mps").transpose(1, 2)
+
+        self.assertFalse(q.is_contiguous())
+        self.assertFalse(k.is_contiguous())
+        self.assertFalse(v.is_contiguous())
+
+        out_mps_noncontig = F.scaled_dot_product_attention(q, k, v)
+
+        out_mps_contig = F.scaled_dot_product_attention(q.contiguous(), k.contiguous(), v.contiguous())
+
+        out_cpu = F.scaled_dot_product_attention(q.cpu(), k.cpu(), v.cpu())
+
+        self._compare_tensors(out_mps_noncontig.cpu(), out_cpu)
+        self._compare_tensors(out_mps_contig.cpu(), out_cpu)
+        self._compare_tensors(out_mps_noncontig, out_mps_contig)
+
+        mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device="mps"))
+
+        out_mps_noncontig_mask = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+        out_mps_contig_mask = F.scaled_dot_product_attention(q.contiguous(), k.contiguous(), v.contiguous(), attn_mask=mask)
+        out_cpu_mask = F.scaled_dot_product_attention(q.cpu(), k.cpu(), v.cpu(), attn_mask=mask.cpu())
+
+        self._compare_tensors(out_mps_noncontig_mask.cpu(), out_cpu_mask)
+        self._compare_tensors(out_mps_contig_mask.cpu(), out_cpu_mask)
+        self._compare_tensors(out_mps_noncontig_mask, out_mps_contig_mask)
+
 
 
 

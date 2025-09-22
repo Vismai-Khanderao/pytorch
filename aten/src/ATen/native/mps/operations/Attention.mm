@@ -437,6 +437,7 @@ std::tuple<Tensor, Tensor> _scaled_dot_product_attention_math_mps(const Tensor& 
 
   auto value_tuple = ensure_4d(value);
   Tensor v_ = std::get<0>(value_tuple);
+  
 
   std::optional<Tensor> mask_;
   if (attn_mask) {
